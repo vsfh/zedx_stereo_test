@@ -134,7 +134,11 @@ def train(args):
     print("Parameter Count: %d" % count_parameters(model))
 
     # train_loader = datasets.fetch_dataloader(args)
-    train_loader = fetch_loader("/mnt/ssd4/xingzenglan/libra/data_lists/zedx_train.list")
+    if os.getlogin() == 'feihongshen':
+        train_data_list = "/mnt/ssd4/xingzenglan/libra/data_lists/zedx_train.list"
+    else:
+        train_data_list = "/data/home/su0251/run/data/data_lists/zedx_train.list"
+    train_loader = fetch_loader(train_data_list)
     optimizer, scheduler = fetch_optimizer(args, model)
     total_steps = 0
     logger = Logger(model, scheduler)
