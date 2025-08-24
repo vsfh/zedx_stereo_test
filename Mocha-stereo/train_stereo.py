@@ -1,7 +1,9 @@
+
 from __future__ import print_function, division
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1, 2, 3, 4'
+
 import argparse
 import logging
 import numpy as np
@@ -9,16 +11,19 @@ from pathlib import Path
 from tqdm import tqdm
 
 from torch.utils.tensorboard import SummaryWriter
+
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-
-from core.igev_stereo import IGEVStereo
+from core.mocha_stereo import Mocha
 from evaluate_stereo import *
 import core.stereo_datasets as datasets
+import torch.nn.functional as F
 from dataset_zedx import fetch_loader
 
+ckpt_path = './checkpoints'
+log_path = './checkpoints'
 
 try:
     from torch.cuda.amp import GradScaler
@@ -35,25 +40,22 @@ except:
         def update(self):
             pass
 
+
 def sequence_loss(disp_preds, disp_init_pred, disp_gt, valid, loss_gamma=0.9, max_disp=192):
-    """ Loss function defined over sequence of disp predictions """
+    """ Loss function defined over sequence of flow predictions """
 
     n_predictions = len(disp_preds)
     assert n_predictions >= 1
     disp_loss = 0.0
-    # exlude invalid pixels and extremely large diplacements
     mag = torch.sum(disp_gt**2, dim=1).sqrt()
-
-    # exclude extremly large displacements
     valid = ((valid >= 0.5) & (mag < max_disp)).unsqueeze(1)
     valid = torch.ones_like(disp_gt,dtype=torch.bool)
     assert valid.shape == disp_gt.shape, [valid.shape, disp_gt.shape]
     assert not torch.isinf(disp_gt[valid.bool()]).any()
 
+
     disp_loss += 1.0 * F.smooth_l1_loss(disp_init_pred[valid.bool()], disp_gt[valid.bool()], size_average=True)
     for i in range(n_predictions):
-        assert not torch.isnan(disp_preds[i]).any() and not torch.isinf(disp_preds[i]).any()
-        # We adjust the loss_gamma so it is consistent for any number of Selective-IGEV iterations
         adjusted_loss_gamma = loss_gamma**(15/(n_predictions - 1))
         i_weight = adjusted_loss_gamma**(n_predictions - i - 1)
         i_loss = (disp_preds[i] - disp_gt).abs()
@@ -69,15 +71,18 @@ def sequence_loss(disp_preds, disp_init_pred, disp_gt, valid, loss_gamma=0.9, ma
         '3px': (epe < 3).float().mean().item(),
         '5px': (epe < 5).float().mean().item(),
     }
+
     return disp_loss, metrics
+
 
 def fetch_optimizer(args, model):
     """ Create the optimizer and learning rate scheduler """
-    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wdecay, eps=1e-8)
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wdecay, eps=1e-6)
 
     scheduler = optim.lr_scheduler.OneCycleLR(optimizer, args.lr, args.num_steps+100,
             pct_start=0.01, cycle_momentum=False, anneal_strategy='linear')
     return optimizer, scheduler
+
 
 class Logger:
     SUM_FREQ = 100
@@ -86,7 +91,7 @@ class Logger:
         self.scheduler = scheduler
         self.total_steps = 0
         self.running_loss = {}
-        self.writer = SummaryWriter(log_dir=args.logdir)
+        self.writer = SummaryWriter(log_dir=log_path)
 
     def _print_training_status(self):
         metrics_data = [self.running_loss[k]/Logger.SUM_FREQ for k in sorted(self.running_loss.keys())]
@@ -97,7 +102,7 @@ class Logger:
         logging.info(f"Training Metrics ({self.total_steps}): {training_str + metrics_str}")
 
         if self.writer is None:
-            self.writer = SummaryWriter(log_dir=args.logdir)
+            self.writer = SummaryWriter(log_dir=log_path)
 
         for k in self.running_loss:
             self.writer.add_scalar(k, self.running_loss[k]/Logger.SUM_FREQ, self.total_steps)
@@ -118,7 +123,7 @@ class Logger:
 
     def write_dict(self, results):
         if self.writer is None:
-            self.writer = SummaryWriter(log_dir=args.logdir)
+            self.writer = SummaryWriter(log_dir=log_path)
 
         for key in results:
             self.writer.add_scalar(key, results[key], self.total_steps)
@@ -126,16 +131,17 @@ class Logger:
     def close(self):
         self.writer.close()
 
+
 def train(args):
 
-    model = nn.DataParallel(IGEVStereo(args))
+    model = nn.DataParallel(Mocha(args))
     print("Parameter Count: %d" % count_parameters(model))
+
     if os.getlogin() == 'feihongshen':
         train_data_list = "/mnt/ssd4/xingzenglan/libra/data_lists/zedx_train.list"
     else:
         train_data_list = "/data/home/su0251/run/data/data_lists/zedx_train.list"
     train_loader = fetch_loader(train_data_list)
-    # train_loader = datasets.fetch_dataloader(args)
     optimizer, scheduler = fetch_optimizer(args, model)
     total_steps = 0
     logger = Logger(model, scheduler)
@@ -180,23 +186,12 @@ def train(args):
             logger.push(metrics)
 
             if total_steps % validation_frequency == validation_frequency - 1:
-                save_path = Path(args.logdir + '/%d_%s.pth' % (total_steps + 1, args.name))
+                save_path = Path(ckpt_path + '/%d_%s.pth' % (total_steps + 1, args.name))
                 logging.info(f"Saving file {save_path.absolute()}")
                 torch.save(model.state_dict(), save_path)
-                if 'sceneflow' in args.train_datasets:
-                    results = validate_sceneflow(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'kitti':
-                    results = validate_kitti(model.module, iters=args.valid_iters, year=2012)
-                    logger.write_dict(results)
-                    results = validate_kitti(model.module, iters=args.valid_iters, year=2015)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'eth3d_finetune':
-                    results = validate_eth3d(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'middlebury_finetune':
-                    results = validate_middlebury(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
+                print('total_steps', total_steps)
+                results = validate_sceneflow(model.module, iters=args.valid_iters)
+                logger.write_dict(results)
                 model.train()
                 model.module.freeze_bn()
 
@@ -207,24 +202,23 @@ def train(args):
                 break
 
         if len(train_loader) >= 10000:
-            save_path = Path(args.logdir + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
+            save_path = Path(ckpt_path + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
             logging.info(f"Saving file {save_path}")
             torch.save(model.state_dict(), save_path)
 
     print("FINISHED TRAINING")
     logger.close()
-    PATH = args.logdir + '/%s.pth' % args.name
+    PATH = ckpt_path + '/%s.pth' % args.name
     torch.save(model.state_dict(), PATH)
 
     return PATH
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', default='igev-stereo', help="name your experiment")
-    parser.add_argument('--restore_ckpt', default=None, help="load the weights from a specific checkpoint")
+    parser.add_argument('--name', default='mocha-stereo', help="name your experiment")
+    parser.add_argument('--restore_ckpt', default=None, help="")
     parser.add_argument('--mixed_precision', default=True, action='store_true', help='use mixed precision')
-    parser.add_argument('--precision_dtype', default='float16', choices=['float16', 'bfloat16', 'float32'], help='Choose precision type: float16 or bfloat16 or float32')
-    parser.add_argument('--logdir', default=None, help='the directory to save logs and checkpoints')
 
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=8, help="batch size used during training.")
@@ -236,7 +230,7 @@ if __name__ == '__main__':
     parser.add_argument('--wdecay', type=float, default=.00001, help="Weight decay in optimizer.")
 
     # Validation parameters
-    parser.add_argument('--valid_iters', type=int, default=32, help='number of flow-field updates during validation forward pass')
+    parser.add_argument('--valid_iters', type=int, default=16, help='number of flow-field updates during validation forward pass')
 
     # Architecure choices
     parser.add_argument('--corr_implementation', choices=["reg", "alt", "reg_cuda", "alt_cuda"], default="reg", help="correlation volume implementation")
@@ -263,6 +257,6 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s')
 
-    Path(args.logdir).mkdir(exist_ok=True, parents=True)
+    Path(ckpt_path).mkdir(exist_ok=True, parents=True)
 
     train(args)
