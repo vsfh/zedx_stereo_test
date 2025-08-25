@@ -160,8 +160,12 @@ def train(args):
 
     should_keep_training = True
     global_batch_num = 0
-    while should_keep_training:
+    for epoch_idx in range(20):
 
+        save_path = Path(os.path.join(args.path, 'ckpt') + '/%d_%s.pth' % (epoch_idx, args.name))
+        logging.info(f"Saving file {save_path.absolute()}")
+        torch.save(model.state_dict(), save_path)
+        
         for i_batch, (_, *data_blob) in enumerate(tqdm(train_loader)):
             optimizer.zero_grad()
             image1, image2, disp, valid = [x.cuda() for x in data_blob]
@@ -184,46 +188,23 @@ def train(args):
 
             logger.push(metrics)
 
-            if total_steps % validation_frequency == validation_frequency - 1:
-                save_path = Path(os.path.join(args.path, 'ckpt') + '/%d_%s.pth' % (total_steps + 1, args.name))
-                logging.info(f"Saving file {save_path.absolute()}")
-                torch.save(model.state_dict(), save_path)
-                
-                if args.train_datasets[0] == 'sceneflow':
-                    results = validate_sceneflow(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'kitti':
-                    results = validate_kitti(model.module, iters=args.valid_iters, year=2012)
-                    logger.write_dict(results)
-                    results = validate_kitti(model.module, iters=args.valid_iters, year=2015)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'eth3d_finetune':
-                    results = validate_eth3d(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'middlebury_finetune':
-                    results = validate_middlebury(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-
-                model.train()
-                model.module.freeze_bn()
-
             total_steps += 1
 
             if total_steps > args.num_steps:
-                should_keep_training = False
                 break
 
-        if len(train_loader) >= 10000:
-            save_path = Path(os.path.join(args.path, 'ckpt') + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
-            logging.info(f"Saving file {save_path}")
-            torch.save(model.state_dict(), save_path)
+    #     if len(train_loader) >= 10000:
+    #         save_path = Path(os.path.join(args.path, 'ckpt') + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
+    #         logging.info(f"Saving file {save_path}")
+    #         torch.save(model.state_dict(), save_path)
 
-    print("FINISHED TRAINING")
-    logger.close()
-    PATH = os.path.join(args.path, 'ckpt') + '/%s.pth' % args.name
-    torch.save(model.state_dict(), PATH)
+    # print("FINISHED TRAINING")
+    # logger.close()
+    # PATH = os.path.join(args.path, 'ckpt') + '/%s.pth' % args.name
+    # torch.save(model.state_dict(), PATH)
 
-    return PATH
+    # return PATH
+    return
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
