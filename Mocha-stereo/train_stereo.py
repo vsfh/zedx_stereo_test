@@ -2,7 +2,7 @@
 from __future__ import print_function, division
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1, 2, 3, 4'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3,4,5'
 
 import argparse
 import logging
