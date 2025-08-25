@@ -45,7 +45,7 @@ def sequence_loss(disp_preds, disp_init_pred, disp_gt, valid, loss_gamma=0.9, ma
     mag = torch.sum(disp_gt**2, dim=1).sqrt()
 
     # exclude extremly large displacements
-    valid = ((valid >= 0.5) & (mag < max_disp)).unsqueeze(1)
+    # valid = ((valid >= 0.5) & (mag < max_disp)).unsqueeze(1)
     valid = torch.ones_like(disp_gt,dtype=torch.bool)
     assert valid.shape == disp_gt.shape, [valid.shape, disp_gt.shape]
     assert not torch.isinf(disp_gt[valid.bool()]).any()
@@ -156,17 +156,20 @@ def train(args):
 
     should_keep_training = True
     global_batch_num = 0
-    while should_keep_training:
-
+    for epoch_idx in range(20):
+        save_path = Path(args.logdir + '/%d_%s.pth' % (epoch_idx, args.name))
+        logging.info(f"Saving file {save_path.absolute()}")
+        torch.save(model.state_dict(), save_path)
+        
         for i_batch, (_, *data_blob) in enumerate(tqdm(train_loader)):
             optimizer.zero_grad()
-            image1, image2, disp_gt, valid = [x.cuda() for x in data_blob]
+            image1, image2, disp_gt = [x.cuda() for x in data_blob[:3]]
 
             assert model.training
             disp_init_pred, disp_preds = model(image1, image2, iters=args.train_iters)
             assert model.training
 
-            loss, metrics = sequence_loss(disp_preds, disp_init_pred, disp_gt, valid, max_disp=args.max_disp)
+            loss, metrics = sequence_loss(disp_preds, disp_init_pred, disp_gt, None, max_disp=args.max_disp)
             logger.writer.add_scalar("live_loss", loss.item(), global_batch_num)
             logger.writer.add_scalar(f'learning_rate', optimizer.param_groups[0]['lr'], global_batch_num)
             global_batch_num += 1
@@ -179,26 +182,26 @@ def train(args):
             scaler.update()
             logger.push(metrics)
 
-            if total_steps % validation_frequency == validation_frequency - 1:
-                save_path = Path(args.logdir + '/%d_%s.pth' % (total_steps + 1, args.name))
-                logging.info(f"Saving file {save_path.absolute()}")
-                torch.save(model.state_dict(), save_path)
-                if 'sceneflow' in args.train_datasets:
-                    results = validate_sceneflow(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'kitti':
-                    results = validate_kitti(model.module, iters=args.valid_iters, year=2012)
-                    logger.write_dict(results)
-                    results = validate_kitti(model.module, iters=args.valid_iters, year=2015)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'eth3d_finetune':
-                    results = validate_eth3d(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-                if args.train_datasets[0] == 'middlebury_finetune':
-                    results = validate_middlebury(model.module, iters=args.valid_iters)
-                    logger.write_dict(results)
-                model.train()
-                model.module.freeze_bn()
+            # if total_steps % validation_frequency == validation_frequency - 1:
+            #     save_path = Path(args.logdir + '/%d_%s.pth' % (total_steps + 1, args.name))
+            #     logging.info(f"Saving file {save_path.absolute()}")
+            #     torch.save(model.state_dict(), save_path)
+            #     if 'sceneflow' in args.train_datasets:
+            #         results = validate_sceneflow(model.module, iters=args.valid_iters)
+            #         logger.write_dict(results)
+            #     if args.train_datasets[0] == 'kitti':
+            #         results = validate_kitti(model.module, iters=args.valid_iters, year=2012)
+            #         logger.write_dict(results)
+            #         results = validate_kitti(model.module, iters=args.valid_iters, year=2015)
+            #         logger.write_dict(results)
+            #     if args.train_datasets[0] == 'eth3d_finetune':
+            #         results = validate_eth3d(model.module, iters=args.valid_iters)
+            #         logger.write_dict(results)
+            #     if args.train_datasets[0] == 'middlebury_finetune':
+            #         results = validate_middlebury(model.module, iters=args.valid_iters)
+            #         logger.write_dict(results)
+            #     model.train()
+            #     model.module.freeze_bn()
 
             total_steps += 1
 
@@ -206,15 +209,15 @@ def train(args):
                 should_keep_training = False
                 break
 
-        if len(train_loader) >= 10000:
-            save_path = Path(args.logdir + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
-            logging.info(f"Saving file {save_path}")
-            torch.save(model.state_dict(), save_path)
+    #     if len(train_loader) >= 10000:
+    #         save_path = Path(args.logdir + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
+    #         logging.info(f"Saving file {save_path}")
+    #         torch.save(model.state_dict(), save_path)
 
-    print("FINISHED TRAINING")
-    logger.close()
-    PATH = args.logdir + '/%s.pth' % args.name
-    torch.save(model.state_dict(), PATH)
+    # print("FINISHED TRAINING")
+    # logger.close()
+    # PATH = args.logdir + '/%s.pth' % args.name
+    # torch.save(model.state_dict(), PATH)
 
     return PATH
 

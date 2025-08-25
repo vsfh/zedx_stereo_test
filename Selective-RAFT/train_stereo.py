@@ -16,7 +16,7 @@ from evaluate_stereo import *
 import core.stereo_datasets as datasets
 from dataset_zedx import fetch_loader
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1, 2, 3, 4'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 try:
     from torch.cuda.amp import GradScaler
@@ -134,7 +134,7 @@ def train(args):
     print("Parameter Count: %d" % count_parameters(model))
 
     # train_loader = datasets.fetch_dataloader(args)
-    if os.getlogin() == 'feihongshen':
+    if False:
         train_data_list = "/mnt/ssd4/xingzenglan/libra/data_lists/zedx_train.list"
     else:
         train_data_list = "/data/home/su0251/run/data/data_lists/zedx_train.list"
