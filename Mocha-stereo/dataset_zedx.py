@@ -11,7 +11,6 @@ from easydict import EasyDict as edict
 import numpy as np
 import albumentations as A
 from albumentations import ImageOnlyTransform
-from dataset_zedx import fetch_loader
 
 TRAIN_LIST_ROOT = "/data/home/su0251/run/data/data_lists"
 TEST_LIST_ROOT = "/data/home/su0251/run/data/data_lists"

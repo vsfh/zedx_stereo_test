@@ -137,7 +137,7 @@ def train(args):
     model = nn.DataParallel(Mocha(args))
     print("Parameter Count: %d" % count_parameters(model))
 
-    if os.getlogin() == 'feihongshen':
+    if True:
         train_data_list = "/mnt/ssd4/xingzenglan/libra/data_lists/zedx_train.list"
     else:
         train_data_list = "/data/home/su0251/run/data/data_lists/zedx_train.list"
@@ -162,7 +162,11 @@ def train(args):
 
     should_keep_training = True
     global_batch_num = 0
-    while should_keep_training:
+    for epoch_idx in range(20):
+        
+        save_path = Path(ckpt_path + '/%d_epoch_%s.pth.gz' % (epoch_idx, args.name))
+        logging.info(f"Saving file {save_path}")
+        torch.save(model.state_dict(), save_path)
 
         for i_batch, (_, *data_blob) in enumerate(tqdm(train_loader)):
             optimizer.zero_grad()
@@ -185,15 +189,15 @@ def train(args):
             scaler.update()
             logger.push(metrics)
 
-            if total_steps % validation_frequency == validation_frequency - 1:
-                save_path = Path(ckpt_path + '/%d_%s.pth' % (total_steps + 1, args.name))
-                logging.info(f"Saving file {save_path.absolute()}")
-                torch.save(model.state_dict(), save_path)
-                print('total_steps', total_steps)
-                results = validate_sceneflow(model.module, iters=args.valid_iters)
-                logger.write_dict(results)
-                model.train()
-                model.module.freeze_bn()
+            # if total_steps % validation_frequency == validation_frequency - 1:
+            #     save_path = Path(ckpt_path + '/%d_%s.pth' % (total_steps + 1, args.name))
+            #     logging.info(f"Saving file {save_path.absolute()}")
+            #     torch.save(model.state_dict(), save_path)
+            #     print('total_steps', total_steps)
+            #     results = validate_sceneflow(model.module, iters=args.valid_iters)
+            #     logger.write_dict(results)
+            #     model.train()
+            #     model.module.freeze_bn()
 
             total_steps += 1
 
@@ -201,17 +205,17 @@ def train(args):
                 should_keep_training = False
                 break
 
-        if len(train_loader) >= 10000:
-            save_path = Path(ckpt_path + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
-            logging.info(f"Saving file {save_path}")
-            torch.save(model.state_dict(), save_path)
+    #     if len(train_loader) >= 10000:
+    #         save_path = Path(ckpt_path + '/%d_epoch_%s.pth.gz' % (total_steps + 1, args.name))
+    #         logging.info(f"Saving file {save_path}")
+    #         torch.save(model.state_dict(), save_path)
 
-    print("FINISHED TRAINING")
-    logger.close()
-    PATH = ckpt_path + '/%s.pth' % args.name
-    torch.save(model.state_dict(), PATH)
+    # print("FINISHED TRAINING")
+    # logger.close()
+    # PATH = ckpt_path + '/%s.pth' % args.name
+    # torch.save(model.state_dict(), PATH)
 
-    return PATH
+    return
 
 
 if __name__ == '__main__':
