@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 import argparse
 import logging
 import numpy as np
@@ -130,7 +130,7 @@ def train(args):
 
     model = nn.DataParallel(IGEVStereo(args))
     print("Parameter Count: %d" % count_parameters(model))
-    if False:
+    if True:
         train_data_list = "/mnt/ssd4/xingzenglan/libra/data_lists/zedx_train.list"
     else:
         train_data_list = "/data/home/su0251/run/data/data_lists/zedx_train.list"
