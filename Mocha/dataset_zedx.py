@@ -421,12 +421,16 @@ class CustomDataset(Dataset):
         return data_dict['img_path'], img1, img2, data_dict["disp"], torch.ones_like(data_dict["disp"])
 
 
-def fetch_loader(test_data_list="/mnt/ssd4/xingzenglan/libra/data_lists/zedx_val.list"):
+def fetch_loader(test_data_list="/mnt/ssd4/xingzenglan/libra/data_lists/zedx_val.list",bs=6):
     train_dataset = CustomDataset([test_data_list],
                        data_aug=False,
                         resize_scale=1)
-    train_loader = DataLoader(train_dataset, batch_size=6, 
-    pin_memory=True, shuffle=True, num_workers=8, drop_last=True)
+    if bs==1:
+        train_loader = DataLoader(train_dataset, batch_size=bs, 
+            pin_memory=True, shuffle=False, num_workers=8, drop_last=False)
+    else:
+        train_loader = DataLoader(train_dataset, batch_size=bs, 
+            pin_memory=True, shuffle=True, num_workers=8, drop_last=True)
     return train_loader
 
 if __name__=='__main__':

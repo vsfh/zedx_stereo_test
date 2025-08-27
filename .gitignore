@@ -2,3 +2,6 @@ checkpoints
 *.pth
 *.pyc
 *.out
+*.ply
+*.jpg
+*.png
